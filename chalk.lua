@@ -1,3 +1,4 @@
+-- localization
 local string = string
 local table = table
 local type = type
@@ -16,6 +17,7 @@ local SGR_PARAMETERS = {
     dim = 2,
     italic = 3,
     underline = 4,
+    overline = 53,
     invert = 7,
     hide = 8,
     strike = 9,
