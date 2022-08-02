@@ -117,13 +117,7 @@ do
 
         if param ~= nil then
             local accumulator = rawget(self, "styleAccumulator")
-
-            if #accumulator ~= 0 then
-                table.insert(accumulator, ";")
-            end
-
             table.insert(accumulator, param)
-
             return self
         end
 
@@ -132,7 +126,8 @@ do
 
     function CHALK_CORE_METATABLE:__call(text)
         local accumulator = rawget(self, "styleAccumulator")
-        local styleSGR = getSGR(table.concat(accumulator))
+        local styleString = table.concat(accumulator, ";")
+        local styleSGR = getSGR(styleString)
 
         return styleSGR .. tostring(text) .. SGR_RESET_PARAM
     end
@@ -166,15 +161,10 @@ local function chalkCompiler(styleString)
 
         if param ~= nil then
             table.insert(newAccumulator, param)
-            table.insert(newAccumulator, ";")
         else
             formatError(COMPILER_INVALID_KEY_ERR, style)
         end
     end
-
-    -- remove the last semicolon as
-    -- it would break the SGR sequence
-    table.remove(newAccumulator)
 
     return createChalk(newAccumulator)
 end
