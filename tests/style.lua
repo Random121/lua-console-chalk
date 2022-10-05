@@ -26,7 +26,7 @@ do
     local OUTPUT2 = chalk.grey("HELLO")
 
     assert(OUTPUT1 == EXPECTED, "Gray color aliasing failed")
-    assert(OUTPUT1 == EXPECTED, "Grey color aliasing failed")
+    assert(OUTPUT2 == EXPECTED, "Grey color aliasing failed")
 end
 
 do

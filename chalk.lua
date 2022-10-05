@@ -1,12 +1,8 @@
--- localization
-local string = string
-local table = table
-local type = type
-local rawget = rawget
-local error = error
-local tostring = tostring
-local setmetatable = setmetatable
 
+--#region CONSTANTS
+
+-- control sequence introducer: https://w.wiki/3PvE
+local CSI = "\27["
 
 -- SGR parameters: https://w.wiki/3PvB
 -- SGR colors: https://w.wiki/5XYa
@@ -32,7 +28,7 @@ local SGR_PARAMETERS = {
     cyan = 36,
     white = 37,
 
-    -- bright colors
+    -- BRIGHT FOREGROUND COLORS
     blackBright = 90,
     gray = 90, -- alias for blackBright
     grey = 90, -- alias for blackBright
@@ -54,7 +50,7 @@ local SGR_PARAMETERS = {
     bgCyan = 46,
     bgWhite = 47,
 
-    -- bright colors
+    -- BRIGHT BACKGROUND COLORS
     bgBlackBright = 100,
     bgGray = 100, -- alias for bgBlackBright
     bgGrey = 100, -- alias for bgBlackBright
@@ -67,8 +63,16 @@ local SGR_PARAMETERS = {
     bgWhiteBright = 107,
 }
 
+local ERRORS = {
+    CHALK_INVALID_KEY = "[CHALK] Key %s is not valid",
+    COMPILER_INVALID_KEY = "[CHALK COMPILER] Key %s is not valid",
+    COMPILER_WRONG_STYLE_TYPE = "[CHALK COMPILER] Style string must be type string",
+}
 
---#region utility functions
+--#endregion
+
+
+--#region UTILITY FUNCTIONS
 
 local function string_split(str, seperator)
     -- default to whitespace
@@ -84,8 +88,21 @@ local function string_split(str, seperator)
     return parts
 end
 
-local function formatError(formatMessage, ...)
-    local formatted = string.format(formatMessage, ...)
+--#endregion
+
+
+--#region CHALK UTILITY FUNCTIONS
+
+---Gets a SGR string with the specific parameters
+---@param parameters string
+local function getSGR(parameters)
+    return CSI .. parameters .. "m"
+end
+
+---Raises an error with the specified error message format
+---@param errorMessage string Error message format
+local function formattedError(errorMessage, ...)
+    local formatted = string.format(errorMessage, ...)
 
     -- specify level two so error points to
     -- where this function was called
@@ -94,60 +111,67 @@ end
 
 --#endregion
 
+---@class Chalk
+---@field styleAccumulator string[]
+local Chalk = {}
+Chalk.__index = Chalk
 
--- control sequence: https://w.wiki/3PvE
-local CSI = "\027["
-local SGR_FORMAT = CSI .. "%sm"
-
-local function getSGR(parameters)
-    return string.format(SGR_FORMAT, parameters)
-end
-
--- error messages
-local CHALK_INVALID_KEY_ERR = "[CHALK] Key %s is not valid"
-local COMPILER_INVALID_KEY_ERR = "[CHALK COMPILER] Key %s is not valid"
-local COMPILER_STYLE_STRING_TYPE = "[CHALK COMPILER] Style string must be type string"
-
-local CHALK_CORE_METATABLE = {}
 do
-    local SGR_RESET_PARAM = getSGR(SGR_PARAMETERS.reset)
+    -- improves performance by a bit as it is used a lot
+    local SGR_RESET = getSGR(SGR_PARAMETERS.reset)
 
-    function CHALK_CORE_METATABLE:__index(key)
-        local param = SGR_PARAMETERS[key]
+    ---Creates a new chalk object
+    ---@param initialStyles? string[]
+    ---@return Chalk
+    function Chalk.new(initialStyles)
+        initialStyles = initialStyles or {}
 
-        if param ~= nil then
+        local chalkObject = {
+            styleAccumulator = initialStyles,
+        }
+
+        return setmetatable(chalkObject, Chalk)
+    end
+
+    ---Adds a new style to chalk
+    ---@param key any
+    ---@return Chalk
+    function Chalk:__index(key)
+        local parameter = SGR_PARAMETERS[key]
+
+        if parameter ~= nil then
+            ---@type string[]
             local accumulator = rawget(self, "styleAccumulator")
-            table.insert(accumulator, param)
+
+            table.insert(accumulator, parameter)
+
             return self
         end
 
-        formatError(CHALK_INVALID_KEY_ERR, tostring(key))
+        formattedError(ERRORS.CHALK_INVALID_KEY, tostring(key))
     end
 
-    function CHALK_CORE_METATABLE:__call(text)
+    ---Formats the text using the stored styles
+    ---@param text string
+    ---@return string
+    function Chalk:__call(text)
+        ---@type string[]
         local accumulator = rawget(self, "styleAccumulator")
         local styleString = table.concat(accumulator, ";")
         local styleSGR = getSGR(styleString)
 
-        return styleSGR .. tostring(text) .. SGR_RESET_PARAM
+        return styleSGR .. tostring(text) .. SGR_RESET
     end
 
-    CHALK_CORE_METATABLE.__metatable = "This metatable is locked"
+    Chalk.__metatable = "This metatable is locked"
 end
 
-local function createChalk(initialStyles)
-    initialStyles = initialStyles or {}
-
-    local chalkClass = {
-        styleAccumulator = initialStyles,
-    }
-
-    return setmetatable(chalkClass, CHALK_CORE_METATABLE)
-end
-
-local function chalkCompiler(styleString)
+---Creates a new chalk object based on the style string
+---@param styleString string
+---@return Chalk
+local function chalkCompile(styleString)
     if type(styleString) ~= "string" then
-        formatError(COMPILER_STYLE_STRING_TYPE)
+        formattedError(ERRORS.COMPILER_WRONG_STYLE_TYPE)
     end
 
     local styles = string_split(styleString)
@@ -162,26 +186,29 @@ local function chalkCompiler(styleString)
         if param ~= nil then
             table.insert(newAccumulator, param)
         else
-            formatError(COMPILER_INVALID_KEY_ERR, style)
+            formattedError(ERRORS.COMPILER_INVALID_KEY, style)
         end
     end
 
-    return createChalk(newAccumulator)
+    return Chalk.new(newAccumulator)
 end
 
-local CHALK_EXPORT_METATABLE = {}
+---@class ChalkExport
+local ChalkExport = {}
+
 do
-    function CHALK_EXPORT_METATABLE:__index(key)
+    ---Wrapper for chalk and chalk compiler
+    ---@param key string
+    ---@return Chalk | function
+    function ChalkExport:__index(key)
         if key == "compile" then
-            return chalkCompiler
+            return chalkCompile
         end
 
-        return createChalk()[key]
+        return Chalk.new()[key]
     end
 
-    CHALK_EXPORT_METATABLE.__metatable = "This metatable is locked"
+    ChalkExport.__metatable = "This metatable is locked"
 end
 
-local chalk = setmetatable({}, CHALK_EXPORT_METATABLE)
-
-return chalk
+return setmetatable({}, ChalkExport)
