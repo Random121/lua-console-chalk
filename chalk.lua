@@ -139,16 +139,16 @@ do
     function Chalk:__index(key)
         local parameter = SGR_PARAMETERS[key]
 
-        if parameter ~= nil then
-            ---@type string[]
-            local accumulator = rawget(self, "styleAccumulator")
-
-            table.insert(accumulator, parameter)
-
-            return self
+        if parameter == nil then
+            formattedError(ERRORS.CHALK_INVALID_KEY, tostring(key))
         end
 
-        formattedError(ERRORS.CHALK_INVALID_KEY, tostring(key))
+        ---@type string[]
+        local accumulator = rawget(self, "styleAccumulator")
+
+        table.insert(accumulator, parameter)
+
+        return self
     end
 
     ---Formats the text using the stored styles
@@ -157,6 +157,7 @@ do
     function Chalk:__call(text)
         ---@type string[]
         local accumulator = rawget(self, "styleAccumulator")
+
         local styleString = table.concat(accumulator, ";")
         local styleSGR = getSGR(styleString)
 
